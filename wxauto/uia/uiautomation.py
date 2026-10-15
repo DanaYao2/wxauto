@@ -6163,6 +6163,7 @@ class Control():
 
     def GetFirstChildControl(self) -> 'Control':
         """
+        获取当前控件的第一个直接子控件。
         Return `Control` subclass or None.
         """
         ele = _AutomationClient.instance().ViewWalker.GetFirstChildElement(self.Element)
@@ -6216,9 +6217,10 @@ class Control():
 
     def GetChildControl(self, index: int, control_type: str = None) -> 'Control':
         """
+        获取第 N 个子控件
         Get the nth child control.
-        index: int, starts with 0.
-        control_type: `Control` or its subclass, if not None, only return the nth control that matches the control_type.
+        :param index: int, starts with 0.
+        :param control_type: `Control` or its subclass, if not None, only return the nth control that matches the control_type.
         Return `Control` subclass or None.
         """
         children = self.GetChildren()
@@ -6252,6 +6254,7 @@ class Control():
 
     def GetProgenyControl(self, depth: int = 1, index: int = 0, control_type: str = None, refresh=False) -> 'Control':
         """
+        获取指定深度（第 depth 层）的第 index 个控件，并支持按控件类型过滤
         Get the nth control in the mth depth.
         depth: int, starts with 0.
         index: int, starts with 0.
@@ -6661,6 +6664,7 @@ class Control():
     def WheelDown(self, x: int = None, y: int = None, ratioX: float = 0.5, ratioY: float = 0.5, wheelTimes: int = 1,
                   interval: float = 0.05, waitTime: float = OPERATION_WAIT_TIME, api=True) -> None:
         """
+        鼠标滚轮向下操作
         Make control have focus first, move cursor to the specified position and mouse wheel down.
         x: int, if < 0, move x cursor to self.BoundingRectangle.right + x, if not None, ignore ratioX.
         y: int, if < 0, move y cursor to self.BoundingRectangle.bottom + y, if not None, ignore ratioY.
@@ -6684,6 +6688,7 @@ class Control():
     def WheelUp(self, x: int = None, y: int = None, ratioX: float = 0.5, ratioY: float = 0.5, wheelTimes: int = 1,
                 interval: float = 0.05, waitTime: float = OPERATION_WAIT_TIME, api=True) -> None:
         """
+        鼠标滚轮向上操作
         Make control have focus first, move cursor to the specified position and mouse wheel up.
         x: int, if < 0, move x cursor to self.BoundingRectangle.right + x, if not None, ignore ratioX.
         y: int, if < 0, move y cursor to self.BoundingRectangle.bottom + y, if not None, ignore ratioY.
