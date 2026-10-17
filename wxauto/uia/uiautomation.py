@@ -31,9 +31,9 @@ import win32con
 import win32ui
 import pyperclip
 from PIL import ImageGrab
-from typing import (Any, Callable, Dict, List, Iterable, Tuple,
-                    Literal)  # need pip install typing for Python3.4 or lower
+from typing import (Any, Callable, Dict, List, Iterable, Tuple,Literal)  # need pip install typing for Python3.4 or lower
 from .uiplug import *
+from hashlib import md5
 
 comtypes.CoInitialize()
 TreeNode = Any
@@ -58,10 +58,12 @@ try:
     from anytree import Node, RenderTree
 
 
-    def PrintAllControlTree(ele):
+    def PrintAllControlTree(ele, max=9999999):
         def findall(ele, n=0, node=None):
+            if n >= max:
+                return node
             nn = '\n'
-            nodename = f"[{ele.ControlTypeName} {n}](\"{ele.ClassName}\", \"{ele.Name.replace(nn, '')}\", \"{''.join([str(i) for i in ele.GetRuntimeId()])}\")"
+            nodename = f"[{ele.ControlTypeName} {n}](\"{ele.ClassName}\", \"{ele.Name.replace(nn, '')}\", \"{ele.AutomationId}\", \"{''.join([str(i) for i in ele.GetRuntimeId()])}\")"
             if not node:
                 node1 = Node(nodename)
             else:
@@ -72,8 +74,10 @@ try:
             return node1
 
         tree = RenderTree(findall(ele))
+        tree_text = ''
         for pre, fill, node in tree:
-            print(f"{pre}{node.name}")
+            tree_text += f"{pre}{node.name}\n"
+        return tree_text
 except:
     pass
 
@@ -5528,17 +5532,16 @@ class Control():
         newControl = Control.CreateControlFromElement(control.Element)
         return newControl
 
-    @property
-    def tree(self):
+    def tree(self, max=9999999):
         try:
-            return PrintAllControlTree(self)
+            return PrintAllControlTree(self, max)
         except Exception as e:
             pass
         # try:
         #     # from anytree import Node, RenderTree
         #     # node = Node(f"[{self.ControlTypeName} 0](\"{self.ClassName}\", \"{self.Name.replace('\n', '')}\", \"{self.runtimeid}\")")
         #     walk = WalkTree(
-        #         self, 
+        #         self,
         #         getFirstChild=lambda c: c.GetFirstChildControl(),
         #         getNextSibling=lambda c: c.GetNextSiblingControl()
         #     )
@@ -5551,7 +5554,11 @@ class Control():
 
     @property
     def runtimeid(self):
-        return ''.join([str(i) for i in self.GetRuntimeId()])
+        content = self.Name
+        rect = self.BoundingRectangle
+        hash_text = f'({rect.height()},{rect.width()}){content}{self.GetRuntimeId()}'
+        return md5(hash_text.encode()).hexdigest()
+        # return hash_text
 
     def SetSearchFromControl(self, searchFromControl: 'Control') -> None:
         """searchFromControl: `Control` or its subclass"""
@@ -5708,7 +5715,7 @@ class Control():
                    return_img=False) -> str:
         """
         Save the control's screenshot to savePath with optional cropping.
-        
+
         :param savePath: str, the path to save the screenshot.
         :param crop: tuple, the amount to crop in (left, top, right, bottom).
         :param crop_percentage: bool, whether the crop values are in percentage.
@@ -5996,10 +6003,13 @@ class Control():
             result = self.Element.FindAll(tree_scope, condition)
         if return_pointer:
             return result
-        sub_controls = [
-            Control.CreateControlFromElement(result.GetElement(i))
-            for i in range(result.Length)
-        ]
+        sub_controls = []
+        for i in range(result.Length):
+            try:
+                sub_control = Control.CreateControlFromElement(result.GetElement(i))
+                sub_controls.append(sub_control)
+            except:
+                pass
         return sub_controls
 
     # FindAllBuildCache
@@ -6483,6 +6493,9 @@ class Control():
             if not hasattr(self, 'winapi'):
                 self.winapi = Win32(self.GetTopLevelControl().NativeWindowHandle)
             self.winapi.click_by_bbox(self.BoundingRectangle, xbias=x, ybias=y, pos=pos, activate=show_window)
+        # if not hasattr(self, 'winapi'):
+        #         self.winapi = Win32(self.GetTopLevelControl().NativeWindowHandle)
+        # self.winapi.click_by_bbox(self.BoundingRectangle, xbias=x, ybias=y, pos=pos, activate=show_window, move=move)
 
     def Flash(self, color=0x0000FF):
         """
@@ -6496,16 +6509,19 @@ class Control():
 
         left, top, right, bottom = rect.left, rect.top, rect.right, rect.bottom
         desktop_hwnd = win32gui.GetDesktopWindow()
-        for i in range(3):
-            desktop_dc = win32gui.GetWindowDC(desktop_hwnd)
-            brush = win32gui.CreateSolidBrush(color)
-            rect_tuple = (left, top, right, bottom)
-            win32gui.FrameRect(desktop_dc, rect_tuple, brush)
-            time.sleep(0.5)
-            win32gui.InvalidateRect(desktop_hwnd, rect_tuple, True)
-            win32gui.ReleaseDC(desktop_hwnd, desktop_dc)
-            self.Hover()
-            time.sleep(0.5)
+        if not hasattr(self, 'winapi'):
+            self.winapi = Win32(self.GetTopLevelControl().NativeWindowHandle)
+        self.winapi._overlay.add_rect(left, top, right, bottom).flash()
+        # for i in range(3):
+        #     desktop_dc = win32gui.GetWindowDC(desktop_hwnd)
+        #     brush = win32gui.CreateSolidBrush(color)
+        #     rect_tuple = (left, top, right, bottom)
+        #     win32gui.FrameRect(desktop_dc, rect_tuple, brush)
+        #     time.sleep(0.5)
+        #     win32gui.InvalidateRect(desktop_hwnd, rect_tuple, True)
+        #     win32gui.ReleaseDC(desktop_hwnd, desktop_dc)
+        #     self.Hover()
+        #     time.sleep(0.5)
 
     def Hover(self, x: int = None, y: int = None, ratioX: float = 0.5, ratioY: float = 0.5, simulateMove: bool = True,
               waitTime: float = OPERATION_WAIT_TIME, move: bool = False) -> None:
@@ -6516,7 +6532,7 @@ class Control():
         ratioY: float.
         simulateMove: bool, if True, first move cursor to control smoothly.
         waitTime: float.
-        
+
         Hover(), Hover(ratioX=0.5, ratioY=0.5): hover center.
         Hover(10, 10): hover left+10, top+10.
         Hover(-10, -10): hover right-10, bottom-10.
@@ -6531,7 +6547,7 @@ class Control():
             self.winapi.hover_by_bbox(self.BoundingRectangle, xbias=x, ybias=y)
 
     def MiddleClick(self, x: int = None, y: int = None, ratioX: float = 0.5, ratioY: float = 0.5,
-                    simulateMove: bool = True, waitTime: float = OPERATION_WAIT_TIME, move: bool = False,
+                    simulateMove: bool = True, waitTime: float = OPERATION_WAIT_TIME, move: bool = False, pos='center',
                     show_window=False) -> None:
         """
         x: int, if < 0, middle click self.BoundingRectangle.right + x, if not None, ignore ratioX.
@@ -6552,7 +6568,7 @@ class Control():
         else:
             if not hasattr(self, 'winapi'):
                 self.winapi = Win32(self.GetTopLevelControl().NativeWindowHandle)
-            self.winapi.click_by_bbox(self.BoundingRectangle, button='mid', xbias=x, ybias=y, activate=show_window)
+            self.winapi.click_by_bbox(self.BoundingRectangle, button='mid', xbias=x, ybias=y, pos=pos, activate=show_window)
 
     def RightClick(self, x: int = None, y: int = None, ratioX: float = 0.5, ratioY: float = 0.5,
                    simulateMove: bool = True, waitTime: float = OPERATION_WAIT_TIME, move=False, pos='center',
@@ -6662,7 +6678,7 @@ class Control():
         DragDrop(x1, y1, x2, y2, moveSpeed, waitTime)
 
     def WheelDown(self, x: int = None, y: int = None, ratioX: float = 0.5, ratioY: float = 0.5, wheelTimes: int = 1,
-                  interval: float = 0.05, waitTime: float = OPERATION_WAIT_TIME, api=True) -> None:
+                  interval: float = 0.05, waitTime: float = OPERATION_WAIT_TIME, api=True, use_safe_coord=True) -> None:
         """
         鼠标滚轮向下操作
         Make control have focus first, move cursor to the specified position and mouse wheel down.
@@ -6673,11 +6689,12 @@ class Control():
         wheelTimes: int.
         interval: float.
         waitTime: float.
+        use_safe_coord: bool, if True (default), use coordinates away from window edges to avoid triggering window resize.
         """
         if api:
             if not hasattr(self, 'winapi'):
                 self.winapi = Win32(self.GetTopLevelControl().NativeWindowHandle)
-            self.winapi.scroll_wheel(self.BoundingRectangle, wheelTimes * (-120))
+            self.winapi.scroll_wheel(self.BoundingRectangle, wheelTimes * (-120), use_safe_coord=use_safe_coord)
         else:
             cursorX, cursorY = GetCursorPos()
             self.SetFocus()
@@ -6686,7 +6703,7 @@ class Control():
             SetCursorPos(cursorX, cursorY)
 
     def WheelUp(self, x: int = None, y: int = None, ratioX: float = 0.5, ratioY: float = 0.5, wheelTimes: int = 1,
-                interval: float = 0.05, waitTime: float = OPERATION_WAIT_TIME, api=True) -> None:
+                interval: float = 0.05, waitTime: float = OPERATION_WAIT_TIME, api=True, use_safe_coord=True) -> None:
         """
         鼠标滚轮向上操作
         Make control have focus first, move cursor to the specified position and mouse wheel up.
@@ -6697,11 +6714,12 @@ class Control():
         wheelTimes: int.
         interval: float.
         waitTime: float.
+        use_safe_coord: bool, if True (default), use coordinates away from window edges to avoid triggering window resize.
         """
         if api:
             if not hasattr(self, 'winapi'):
                 self.winapi = Win32(self.GetTopLevelControl().NativeWindowHandle)
-            self.winapi.scroll_wheel(self.BoundingRectangle, wheelTimes * 120)
+            self.winapi.scroll_wheel(self.BoundingRectangle, wheelTimes * 120, use_safe_coord=use_safe_coord)
         else:
             cursorX, cursorY = GetCursorPos()
             self.SetFocus()
@@ -6794,9 +6812,9 @@ class Control():
             self.winapi = Win32(self.GetTopLevelControl().NativeWindowHandle)
         self.winapi.input(text, waitTime)
 
-    def Paste(self, text: str):
+    def Paste(self, text: str, click=True):
         pyperclip.copy(text)
-        self.ShortcutPaste()
+        self.ShortcutPaste(click=click)
 
     def SendKeys(self, text: str, interval: float = 0.01, waitTime: float = OPERATION_WAIT_TIME, charMode: bool = True,
                  api=True) -> None:
