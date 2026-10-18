@@ -46,12 +46,12 @@ from wxauto.utils import (
     GetCursorWindow,
     get_active_window,
 )
-from wxauto.ui.browser import WxVideo, WxInvite
+from wxauto.ui.wechat_work.browser import WxVideo, WxInvite
 from typing import Optional
 
 if TYPE_CHECKING:
     from wxauto.msgs.base import Message
-    from wxauto.ui.sessionbox import SessionElement
+    from wxauto.ui.wechat_work.sessionbox import SessionElement
 
 PROJECT_NAME = 'wxauto'
 
@@ -61,43 +61,6 @@ WX_CLIENTS: Dict[str, 'WeChatWork'] = dict()
 
 # functions
 
-
-def get_file_dir(dir_path=None):  # reliably restored by inspect
-    # no doc
-    pass
-
-
-def get_wx_clients(debug=False):
-    """
-    获取当前所有微信客户端
-    Returns:
-        # List[WeChatWork]: 当前所有微信客户端
-        Dict[str,WeChatWork]: 微信号,微信客户端
-    """
-    global WX_CLIENTS
-    cls_name = WeChatMainWnd._ui_cls_name
-    name = WeChatMainWnd._ui_name
-    windows_infos = FindWindows(classname=cls_name, name=name)
-    wxlog.debug(f"""当前所有企业微信窗口:{json.dumps(windows_infos, ensure_ascii=False)}""")
-    hwnds = list()
-    # 加入新对象
-    for windows_info in windows_infos:
-        hwnd = windows_info[0]
-        hwnds.append(str(hwnd))
-        if str(hwnd) in WX_CLIENTS:
-            continue
-        WX_CLIENTS[str(hwnd)] = WeChatWork(hwnd=hwnd, debug=debug)
-
-    if len(WX_CLIENTS.keys()) > len(hwnds):
-        old_hwnds = list(WX_CLIENTS.keys())
-        for hwnd in old_hwnds:
-            if hwnd not in hwnds:
-                del WX_CLIENTS[hwnd]
-
-    return {i.wechat_id: i for i in WX_CLIENTS.values()}
-
-
-# classes
 
 class Listener(ABC):
     def _listener_start(self):
@@ -966,6 +929,36 @@ class WeChatDialog(__wxautox_ui_base.BaseUISubWnd):
     def click_button(self, text, move=True):  # reliably restored by inspect
         # no doc
         pass
+
+
+def get_wx_clients(debug=False):
+    """
+    获取当前所有微信客户端
+    Returns:
+        # List[WeChatWork]: 当前所有微信客户端
+        Dict[str,WeChatWork]: 微信号,微信客户端
+    """
+    global WX_CLIENTS
+    cls_name = WeChatMainWnd._ui_cls_name
+    name = WeChatMainWnd._ui_name
+    windows_infos = FindWindows(classname=cls_name, name=name)
+    wxlog.debug(f"""当前所有企业微信窗口:{json.dumps(windows_infos, ensure_ascii=False)}""")
+    hwnds = list()
+    # 加入新对象
+    for windows_info in windows_infos:
+        hwnd = windows_info[0]
+        hwnds.append(str(hwnd))
+        if str(hwnd) in WX_CLIENTS:
+            continue
+        WX_CLIENTS[str(hwnd)] = WeChatWork(hwnd=hwnd, debug=debug)
+
+    if len(WX_CLIENTS.keys()) > len(hwnds):
+        old_hwnds = list(WX_CLIENTS.keys())
+        for hwnd in old_hwnds:
+            if hwnd not in hwnds:
+                del WX_CLIENTS[hwnd]
+
+    return {i.nickname: i for i in WX_CLIENTS.values()}
 
 
 def get_wx_logins() -> List[LoginWnd]:
