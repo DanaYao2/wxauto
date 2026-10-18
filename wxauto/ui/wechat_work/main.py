@@ -17,6 +17,7 @@ from wxauto.param import WxResponse
 from .chatbox import ChatBox
 from .sessionbox import SessionBox
 from .navigationbox import NavigationBox
+from .activate_ui import _activate_uia_tree
 from wxauto.param import (
     WxParam,
     WxResponse,
@@ -150,6 +151,8 @@ class WeChatMainWnd(WeChatSubWnd):
     @time_it
     def _setup_ui(self, hwnd: int):
         self.HWND = hwnd
+        _activate_uia_tree(hwnd=self.HWND)
+
         self.control = uia.ControlFromHandle(hwnd)
         # 打印树状结构
         self.Show()

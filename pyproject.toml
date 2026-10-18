@@ -17,6 +17,7 @@ dependencies = [
     "comtypes",
     "loguru",
     "pydantic",
+    "pefile>=2024.8.26",
 ]
 
 [tool.setuptools.packages.find]
@@ -24,6 +25,10 @@ include = ["wxauto*"]  # 只包含 wxauto 相关的包
 
 [tool.setuptools.package-data]
 "wxauto" = ["*.pyd", 'uia/*.pyd']  # 包含 wxauto 目录下的所有 .pyd 文件
+
+[[tool.uv.index]]
+url = "https://pypi.tuna.tsinghua.edu.cn/simple/"
+default = true
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
