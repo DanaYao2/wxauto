@@ -61,6 +61,7 @@ WECHAT_SESSION_BOX = {
 }
 
 WECHAT_NAVIGATION_BOX = {
+    '我的信息': {'cn': "我的信息", 'cn_t': '', 'en': ""},
     '聊天': {'cn': "聊天", 'cn_t': '', 'en': ""},
     '通讯录': {'cn': "通讯录", 'cn_t': '', 'en': ""},
     '收藏': {'cn': "收藏", 'cn_t': '', 'en': ""},

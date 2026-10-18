@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, Optional, Union
 import os
 
 PROJECT_NAME = 'wxauto'
@@ -40,7 +40,7 @@ class WxParam:
 
 
 class WxResponse(dict):
-    def __init__(self, status: str, message: str, data: dict = None):
+    def __init__(self, status: str, message: str, data: Optional[dict] = None):
         super().__init__(status=status, message=message, data=data)
 
     def __str__(self):
@@ -64,13 +64,13 @@ class WxResponse(dict):
         return self['status'] == '成功'
 
     @classmethod
-    def success(cls, msg=None, data: dict | list = None):
+    def success(cls, msg=None, data: Optional[Union[dict, list]] = None):
         return cls(status="成功", message=msg, data=data)
 
     @classmethod
-    def failure(cls, msg: str, data: dict | list = None):
+    def failure(cls, msg: str, data: Optional[Union[dict, list]] = None):
         return cls(status="失败", message=msg, data=data)
 
     @classmethod
-    def error(cls, msg: str, data: dict | list = None):
+    def error(cls, msg: str, data: Optional[Union[dict, list]] = None):
         return cls(status="错误", message=msg, data=data)

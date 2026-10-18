@@ -400,3 +400,23 @@ def print_control_tree(control, indent=0, prefix="", use_unicode=True):
         # 使用 loguru 的 ERROR 级别记录错误
         error_msg = f"错误: {str(e)}"
         logger.error(f"{vline * (indent - 1)}{prefix} {error_msg}")
+
+
+def inspect_hwnds(parent_hwnd):
+    from wxauto.logger import wxlog as logger
+    def callback(hwnd, _):
+        try:
+            _, pid = win32process.GetWindowThreadProcessId(hwnd)
+
+            logger.info({
+                "hwnd": hwnd,
+                "parent": win32gui.GetParent(hwnd),
+                "pid": pid,
+                "class": win32gui.GetClassName(hwnd),
+                "title": win32gui.GetWindowText(hwnd),
+                "rect": win32gui.GetWindowRect(hwnd),
+            })
+        except Exception as e:
+            logger.warning(f"读取 HWND {hwnd} 失败: {e}")
+
+    win32gui.EnumChildWindows(parent_hwnd, callback, None)

@@ -1,11 +1,22 @@
 # wxauto
-> 开源项目[wxauto](https://github.com/cluic/wxauto)二次开发
+> - 开源项目[wxauto](https://github.com/cluic/wxauto)二次开发
+> - 参考项目[本地](../wx_listen) [github仓库](https://github.com/just-entertainment/wx_listen/tree/master) 
 
 
 
 
 
-
+## 打包
+- 安装打包工具
+    ```cmd
+    python -m pip install --upgrade build setuptools wheel
+    ```
+- 执行打包
+    ```cmd
+    python -m build
+    // 如果只需要 .whl 文件
+    python -m build --wheel
+    ```
 
 
 

@@ -4,6 +4,7 @@ from .wx import (
     LoginWnd,
     get_wx_clients
 )
+from .wechat_work import WeChatWork, get_wx_clients as get_wechat_work_clients
 from .param import WxParam
 import pythoncom
 
@@ -14,5 +15,7 @@ __all__ = [
     'Chat',
     'WxParam',
     'LoginWnd',
-    'get_wx_clients'
+    'get_wx_clients',
+    'WeChatWork',
+    'get_wechat_work_clients'
 ]
