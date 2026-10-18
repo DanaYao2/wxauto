@@ -10,7 +10,7 @@
 import concurrent.futures._base as __concurrent_futures__base
 import json
 import wxauto.ui.base as __wxautox_ui_base
-from .ui.wechat_work.main import WeChatMainWnd, WeChatSubWnd
+from .ui.wechat_work.main import WeChatMainWnd, WeChatSubWnd, WeChatLoginWnd
 from .ui.component import CMenuWnd
 from .param import (
     WxResponse,
@@ -110,19 +110,23 @@ class Listener(ABC):
         self._listener_thread.start()
 
     def _listener_listen(self):
+        self._excutor = ThreadPoolExecutor(max_workers=WxParam.LISTENER_EXCUTOR_WORKERS)
         if not hasattr(self, 'listen') or not self.listen:
             self.listen = {}
         while not self._listener_stop_event.is_set():
             try:
                 self._get_listen_messages()
+            except KeyboardInterrupt:
+                wxlog.debug("监听消息终止")
+                self._listener_stop()
+                break
             except:
                 wxlog.debug(f'监听消息失败：{traceback.format_exc()}')
             time.sleep(WxParam.LISTEN_INTERVAL)
 
-    def _safe_callback(self, callback, msg, chat):
+    def _safe_callback(self, callback: Callable[['Message', 'Chat'], None], msg: 'Message', chat: 'Chat'):
         try:
-            with self._lock:
-                callback(msg, chat)
+            callback(msg, chat)
         except Exception as e:
             wxlog.debug(f"监听消息回调发生错误：{traceback.format_exc()}")
 
@@ -130,6 +134,7 @@ class Listener(ABC):
         self._listener_is_listening = False
         self._listener_stop_event.set()
         self._listener_thread.join()
+        self._excutor.shutdown(wait=True)
 
     @abstractmethod
     def _get_listen_messages(self):
@@ -435,23 +440,17 @@ class Chat:
 
 
 class LoginWnd:
-    """登录相关"""
+    def __init__(self, app_path=None, hwnd=None):
+        self._api = WeChatLoginWnd(app_path=app_path, hwnd=hwnd)
 
-    def __init__(self, app_path=None, **kwargs):  # reliably restored by inspect
-        # todo
-        hwnd = None
-        if 'hwnd' in kwargs:
-            hwnd = kwargs['hwnd']
-        self.core = WeChatLoginWnd(hwnd=hwnd, app_path=app_path)
+    def exists(self, wait: int = 0):
+        return self._api.exists(wait)
 
-    def exists(self, wait=0):  # reliably restored by inspect
+    def login(self, timeout: int = 10):
+        return self._api.login(timeout=timeout)
 
-        # todo
-        pass
-
-    def get_qrcode(self, path=None):  # reliably restored by inspect
-        """
-        获取登录二维码
+    def get_qrcode(self, path=None):
+        """获取登录二维码
 
         Args:
             path (str): 二维码图片的保存路径，默认为None，即本地目录下的wxauto_qrcode文件夹
@@ -460,20 +459,18 @@ class LoginWnd:
         Returns:
             str: 二维码图片的保存路径
         """
-        return self.core.get_qrcode(path=path)
+        return self._api.get_qrcode(path=path)
 
-    def login(self, timeout=10):  # reliably restored by inspect
-        # todo
-        pass
+    def reopen(self):
+        """重新打开"""
+        return self._api.reopen()
 
-    def open(self):  # reliably restored by inspect
-        # todo
-        pass
+    def open(self):
+        return self._api.open()
 
-    def reopen(self):  # reliably restored by inspect
-        """ 重新打开 """
-        # todo
-        pass
+    def close(self):
+        """关闭微信"""
+        return self._api.close()
 
 
 class MomentsWnd(__wxautox_ui_base.BaseUISubWnd):
@@ -971,74 +968,10 @@ class WeChatDialog(__wxautox_ui_base.BaseUISubWnd):
         pass
 
 
-class WeChatLoginWnd(__wxautox_ui_base.BaseUIWnd):
-    """登录窗口"""
-    _ui_cls_name = 'WeChatLoginWndForPC'
-    _ui_name = "微信"
-
-    def __init__(self, hwnd: int = None, app_path=None):  # reliably restored by inspect
-        self.root = self
-        self.parent = self
-        self.control: Optional[uia.Control] = None
-        if hwnd:
-            self._setup_ui(hwnd)
-        else:
-            hwnd = FindWindow(classname=self._ui_cls_name, name=self._ui_name)
-            if not hwnd:
-                raise Exception(f'未找到微信登录窗口')
-            self._setup_ui(hwnd)
-        wxlog.info(f'初始化成功，获取到登录窗口')
-
-    def _setup_ui(self, hwnd: int):
-        self.HWND = hwnd
-        self.control = uia.ControlFromHandle(hwnd)
-        self.close_button = self.control.PaneControl(searchDepth=1, ClassName='').ButtonControl(Name="关闭")
-
-    def __repr__(self):  # reliably restored by inspect
-        # no doc
-        pass
-
-    # no doc
-    def get_qrcode(self, path=None):  # reliably restored by inspect
-        """
-        获取登录二维码
-
-        Args:
-            path (str): 二维码图片的保存路径，默认为None，即本地目录下的wxauto_qrcode文件夹
-
-        Returns:
-            str: 二维码图片的保存路径
-        """
-
-        while True:
-            qrcode_text_ele = self.control.TextControl(Name="扫码登录")
-            switch_but_ele = self.control.ButtonControl(Name="切换账号")
-            if switch_but_ele.Exists():
-                switch_but_ele.Click()
-                time.sleep(0.5)
-                continue
-            elif qrcode_text_ele.Exists():
-                _ele = qrcode_text_ele.GetNextSiblingControl()
-                # todo 获取登录二维码
-                wxlog.warning(f"""获取微信二维码功能待研发...""")
-                return None
-
-    def login(self, timeout=15):  # reliably restored by inspect
-        # no doc
-        pass
-
-    def open(self):  # reliably restored by inspect
-        # no doc
-        pass
-
-    def reopen(self):  # reliably restored by inspect
-        """ 重新打开 """
-        pass
-
-    def shutdown(self):  # reliably restored by inspect
-        """ 关闭进程 """
-        pass
-
-    def _lang(self, key):  # reliably restored by inspect
-        # no doc
-        pass
+def get_wx_logins() -> List[LoginWnd]:
+    win32wins = GetAllWindows()
+    return [
+        LoginWnd(hwnd=win[0])
+        for win in win32wins
+        if win[1] == WeChatLoginWnd._ui_cls_name
+    ]
