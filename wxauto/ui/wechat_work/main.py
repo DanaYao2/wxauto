@@ -26,10 +26,18 @@ from wxauto.languages import *
 from wxauto.utils import (
     GetAllWindows,
     FindWindow,
+    FindTopLevelControl,
+    get_windows_by_pid,
     time_it
 )
+from wxauto.utils.tools import now_time
 from wxauto.logger import wxlog
 from typing import Union, List, Optional
+import time
+import winreg
+import random
+import os
+import sys
 
 from wxauto.utils import print_control_tree, inspect_hwnds
 
@@ -261,7 +269,7 @@ class WeChatMainWnd(WeChatSubWnd):
             find_nickname = result['data'].get('nickname', keywords)
             return WeChatSubWnd(find_nickname, self)
 
-    def _get_next_new_message(self, chat_page_tab,filter_mute: bool = False):
+    def _get_next_new_message(self, chat_page_tab, filter_mute: bool = False):
         """
         获取下一条新消息
         Args:
@@ -319,7 +327,7 @@ class WeChatMainWnd(WeChatSubWnd):
         self.navigation.switch_to_tab_chat_page(name=chat_page_tab)
         if filter_mute and not self.navigation.has_new_message():
             return {}
-        new_msgs = self._get_next_new_message(chat_page_tab,filter_mute)
+        new_msgs = self._get_next_new_message(chat_page_tab, filter_mute)
         if new_msgs:
             chat_info = self.chatbox.get_info()
             return {
@@ -349,3 +357,128 @@ class WeChatMainWnd(WeChatSubWnd):
         except Exception as e:
             wxlog.error(f"""{self}窗口关闭失败:{e.__str__()}""")
             return False
+
+
+class WeChatLoginWnd(BaseUIWnd):
+    # _ui_cls_name: str = 'WeChatLoginWndForPC'
+    _ui_cls_name: str = 'WeChatLogin'
+
+    def __init__(self, app_path=None, hwnd=None):
+        self.app_path = app_path
+        if not hwnd:
+            hwnd = FindWindow(classname=self._ui_cls_name)
+        if hwnd:
+            self.control = uia.ControlFromHandle(hwnd)
+        else:
+            self.open()
+
+    def __repr__(self) -> str:
+        return f"<wxauto LoginWnd Object at {hex(id(self))}>"
+
+    def _lang(self, key):
+        return key
+
+    @property
+    def _app_path(self):
+        """获取企业微信应用地址"""
+        if self.app_path:
+            return self.app_path
+        try:
+            # 通过注册表获取企业微信路径
+            registry_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Software\Tencent\WXWork", 0, winreg.KEY_READ)
+            try:
+                path, _ = winreg.QueryValueEx(registry_key, "InstallPath")
+            except FileNotFoundError:
+                path, _ = winreg.QueryValueEx(registry_key, "Executable")
+            winreg.CloseKey(registry_key)
+
+            wxpath = os.path.join(path, "WXWork.exe")
+            if os.path.exists(wxpath):
+                self.app_path = wxpath
+                return wxpath
+            else:
+                raise Exception('nof found')
+        except WindowsError:
+            print("未找到微信安装路径，请先打开微信启动页面再次尝试运行该方法！")
+
+    def login(self, timeout=15):
+        # todo 待确认
+        enter_button = self.control.ButtonControl(Name='进入微信')
+        qrcode = self.control.ButtonControl(Name='二维码')
+        if enter_button.Exists(0.5):
+            enter_button.Click()
+
+            dialog = self.control.PaneControl(ClassName='WeUIDialog')
+            # wx = uia.WindowControl(ClassName='WeChatMainWndForPC', searchDepth=1)
+
+            t0 = time.time()
+            while True:
+                if time.time() - t0 > timeout:
+                    raise Exception('微信登录超时')
+                if FindWindow(classname='WeChatMainWndForPC'):
+                    break
+                elif dialog.Exists(0):
+                    dialog_text = dialog.TextControl().Name
+                    wxlog.debug(f"识别到弹窗：{dialog_text}")
+                    dialog.SendKeys('{Esc}')
+                    time.sleep(0.5)
+                    return self.login(timeout)
+                elif qrcode.Exists(0):
+                    return WxResponse.failure("需扫码登录")
+            return WxResponse.success()
+        elif qrcode.Exists(0):
+            return WxResponse.failure("需扫码登录")
+        else:
+            return WxResponse.failure("未找到登录按钮")
+
+    def get_qrcode(self, path=None):
+        """获取登录二维码
+
+        Args:
+            path (str): 二维码图片的保存路径，默认为None，即本地目录下的wxauto_qrcode文件夹
+
+
+        Returns:
+            str: 二维码图片的保存路径
+        """
+        # todo 待确认
+        self._show()
+        if path is None:
+            default_dir = os.path.realpath('wxauto_qrcode')
+            if not os.path.exists(default_dir):
+                os.mkdir(default_dir)
+            path = os.path.join(default_dir, f'qrcode_{now_time()}.png')
+        elif os.path.exists(path) and os.path.isdir(path):
+            path = os.path.join(path, f'qrcode_{now_time()}.png')
+        elif os.path.exists(os.path.dirname(path)) and path.endswith('.png'):
+            pass
+        else:
+            raise ValueError('请输入正确的路径，或不指定path参数以使用默认路径')
+        switch_account_button = self.control.ButtonControl(Name='切换账号')
+        if switch_account_button.Exists(0.5):
+            switch_account_button.Click()
+
+        qrcode_control = self.control.ButtonControl(Name='二维码')
+        qrcode = qrcode_control.ScreenShot(path)
+        return qrcode
+
+    def shutdown(self):
+        """关闭进程"""
+        pid = self.control.ProcessId
+        os.system(f'taskkill /f /pid {pid}')
+
+    def reopen(self):
+        """重新打开"""
+        self.shutdown()
+        self.open()
+
+    def open(self):
+        path = self._app_path
+        os.system(f'"start "" "{path}""')
+        hwnd = FindWindow(classname=self._ui_cls_name, timeout=5)
+        if hwnd:
+            self.control = uia.ControlFromHandle(hwnd)
+        if self.control.Exists(10):
+            return
+        else:
+            raise Exception('打开微信失败，请指定微信路径')
