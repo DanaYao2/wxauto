@@ -36,8 +36,9 @@ DateTimeField = Annotated[
 ]
 
 
-class WechatWorkMessage(BaseSchema):
+class WXWorkMessage(BaseSchema):
     msg_id: str = Field(..., title="消息id")
+    runtime_id: str = Field("", title="唯一id(包含高度和宽度信息)")
     send_name: str = Field(..., title="发送人")
     session_name: str = Field(..., title="会话")
     is_system: bool = Field(False, title="是否是系统消息")
@@ -62,6 +63,6 @@ class WechatWorkMessage(BaseSchema):
         return None
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, WechatWorkMessage):
+        if not isinstance(other, WXWorkMessage):
             return NotImplemented
         return self.msg_id == other.msg_id

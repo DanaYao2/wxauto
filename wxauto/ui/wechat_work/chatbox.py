@@ -12,7 +12,7 @@ import datetime
 import random
 
 from ..base import BaseUISubWnd
-from .schemas import WechatWorkMessage
+from .schemas import WXWorkMessage
 from wxauto.ui.component import (
     CMenuWnd,
 )
@@ -35,7 +35,7 @@ from wxauto.utils.tools import roll_into_view
 from wxauto.utils.tool_md5 import compute_md5
 import time
 import os
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List, Dict, Tuple, Generator
 from loguru import logger
 
 USED_MSG_IDS = {}
@@ -191,7 +191,7 @@ class ChatBox(BaseUISubWnd):
         # todo 待确认
         USED_MSG_IDS[self.id] = tuple((i.runtimeid for i in self.msg_box.GetChildren()))
 
-    def _parse_msg(self, msg_ele: uia.Control, now_time=None) -> Optional[WechatWorkMessage]:
+    def _parse_msg(self, msg_ele: uia.Control, now_time=None) -> Optional[WXWorkMessage]:
         """
         解析消息
         Args:
@@ -237,8 +237,9 @@ class ChatBox(BaseUISubWnd):
 
         msg_id = compute_md5(source_text)
         wxlog.debug(f"提取到消息内容:{msg_id=};{send_name=};{msg_time=};content={_text}")
-        return WechatWorkMessage(
+        return WXWorkMessage(
             msg_id=msg_id,
+            runtime_id=msg_ele.runtimeid,
             send_name=send_name,
             session_name=self.who,
             is_system=is_system_msg,
@@ -363,6 +364,7 @@ class ChatBox(BaseUISubWnd):
             wxlog.debug(f"[{i}] `消息区>工具`栏`查找聊天记录`按钮查找失败")
 
     def get_info(self):
+        # todo 待确认
         self.parent._show()
         chat_info = {}
         walk = uia.WalkControl(self.control)
@@ -447,7 +449,7 @@ class ChatBox(BaseUISubWnd):
             True:清除内容成功
             False:清除内容失败
         """
-        # self._show()
+        self.parent._show()
         # 先尝试用
         for i in range(4):
             if not (text := self.get_edit_box_content()):
@@ -470,7 +472,7 @@ class ChatBox(BaseUISubWnd):
             content: 需要发送的内容
         Returns:
         """
-        # self._show()
+        self.parent._show()
         t0 = time.time()
 
         # 输入内容到编辑区
@@ -555,47 +557,48 @@ class ChatBox(BaseUISubWnd):
         Returns:
         """
         self.parent._show()
-        msg_len = len(self.msg_box.GetChildren()) if self.msg_box else 0
-        load_more_ele = self.msg_box.GetChildren()[0]
+        if not self.msg_box:
+            return WxResponse.failure("没有更多消息了")
+
+        load_more_ele = self.msg_box.GetFirstChildControl()
+        if not load_more_ele:
+            return WxResponse.failure("没有更多消息了")
+
         load_more_id = load_more_ele.runtimeid
-        logger.debug(f"消息id:{load_more_id},消息内容:{load_more_ele.Name}")
         load_more_top = load_more_ele.BoundingRectangle.top
 
         while True:
             # 最上面一条消息出现变化或消息总数出现变化则说明加载到了更多的消息了
             logger.debug(f"消息id:{load_more_ele.runtimeid},消息内容:{load_more_ele.Name}")
-            if (
-                    load_more_ele.runtimeid != load_more_id or  # 出现了新消息 最上面一条和之前记录下的不一样了
-                    len(self.msg_box.GetChildren()) > msg_len  # 消息条数增加了
-            ):
-                # 有更多条数据了
-                isload = True
-                break
-            else:
-                # 向上滚动
-                self.msg_box.WheelUp(wheelTimes=random.randint(3, 6),
-                                     waitTime=random.uniform(0.12, 0.3)
-                                     )
-                time.sleep(interval)
+            # 向上滚动
+            self.msg_box.WheelUp(wheelTimes=random.randint(3, 6),
+                                 waitTime=random.uniform(0.12, 0.3)
+                                 )
+            time.sleep(max(0.3, interval))
 
-                load_more_ele = self.msg_box.GetChildren()[0]
-                new_load_more_top = load_more_ele.BoundingRectangle.top
-                if (
-                        new_load_more_top == load_more_top  # 滚不动了
-                        and len(self.msg_box.GetChildren()) == msg_len
-                ):
-                    isload = False
-                    break
-                else:
-                    load_more_top = new_load_more_top
+            load_more_ele = self.msg_box.GetFirstChildControl()
+            new_load_more_id = load_more_ele.runtimeid
+            new_load_more_top = load_more_ele.BoundingRectangle.top
+
+            if new_load_more_top == load_more_top and new_load_more_id == load_more_id:
+                # 滚到头了
+                is_load = False
+                break
+
+            if new_load_more_id != load_more_id:
+                # 有新数据了
+                is_load = True
+                break
+
+            load_more_top = new_load_more_top
 
         self.msg_box.WheelUp(wheelTimes=1, waitTime=0.1)
-        if isload:
+        if is_load:
             return WxResponse.success()
         else:
             return WxResponse.failure("没有更多消息了")
 
-    def iter_messages(self, reverse: bool = False):
+    def iter_msgs(self, reverse: bool = False) -> Generator[WXWorkMessage]:
         """
         迭代读取消息。
 
@@ -606,7 +609,7 @@ class ChatBox(BaseUISubWnd):
         Yields:
             解析成功的单条消息。
         """
-        if not self.msg_box.Exists(0):
+        if not self.msg_box:
             return
 
         now_time = datetime.datetime.now()
@@ -644,7 +647,7 @@ class ChatBox(BaseUISubWnd):
         #
         # return WxResponse.success(msg="获取消息成功", data=result)
 
-        return WxResponse.success(msg="获取消息成功",data=list(self.iter_messages(reverse=False)),)
+        return WxResponse.success(msg="获取消息成功", data=list(self.iter_msgs(reverse=False)), )
 
     def get_new_msgs(self):
         """
@@ -655,38 +658,30 @@ class ChatBox(BaseUISubWnd):
         if not self.msg_box:
             return []
 
-        # 待处理
-        msg_controls = self.msg_box.GetChildren()
-        now_msg_ids = tuple((i.runtimeid for i in msg_controls))
-        if (
-                not now_msg_ids
-                or (not self.used_msg_ids and now_msg_ids)
-                or now_msg_ids[-1] == self.used_msg_ids[-1]
-                or not set(now_msg_ids) & set(self.used_msg_ids)
-        ):
-            wxlog.debug('没有新消息')
-            return []
+        result = []
+        for msg_info in self.iter_msgs(reverse=True):
+            if msg_info.is_system:
+                # 系统消息 跳过处理
+                continue
 
-        used_msg_ids_set = set(self.used_msg_ids)
-        last_one_msgid = max(
-            (x for x in now_msg_ids if x in used_msg_ids_set),
-            key=self.used_msg_ids.index, default=None
-        )
-        new1 = [x for x in now_msg_ids if x not in used_msg_ids_set]
-        new2 = now_msg_ids[now_msg_ids.index(last_one_msgid) + 1:] \
-            if last_one_msgid is not None else []
-        new = [i for i in new1 if i in new2] if new2 else new1
-        USED_MSG_IDS[self.id] = tuple(self.used_msg_ids + tuple(new))[-100:]
-        new_controls = [i for i in msg_controls if i.runtimeid in new]
-        self.msg_box.MiddleClick()
-        return [
-            parse_msg(msg_control, self)
-            for msg_control
-            in new_controls
-            if msg_control.ControlTypeName == 'ListItemControl'
-        ]
+            if not (latest_msg_id := self.user_latest_msg_id):
+                # 没有最新消息
+                result.append(msg_info)
+                continue
+            if latest_msg_id[0] != msg_info.msg_id and msg_info.msg_timestamp >= latest_msg_id[1]:
+                result.append(msg_info)
+                continue
+            if latest_msg_id[0] == msg_info.msg_id:
+                break
+            if msg_info.msg_timestamp < latest_msg_id[1]:
+                break
+        if result:
+            USER_LATEST_MSG_IDS[self.id] = tuple(result[0].runtime_id, result[0].msg_timestamp)
 
-    def _get_tail_after_nth_match(self, msgs, last_msg: WechatWorkMessage, n):
+        # 反转顺序
+        return [reversed(result)]
+
+    def _get_tail_after_nth_match(self, msgs, last_msg: WXWorkMessage, n):
         """
         按基准消息筛选新消息
         Args:
@@ -718,6 +713,7 @@ class ChatBox(BaseUISubWnd):
         Returns:
 
         """
+        # todo 待确认
         # 1. 消息列表不存在，则返回空列表
         if not self.msg_box.Exists(0):
             wxlog.debug('消息列表不存在，返回空列表')
