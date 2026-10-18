@@ -9,9 +9,9 @@
 # =========================================================
 import concurrent.futures._base as __concurrent_futures__base
 import json
-import wxauto.ui.base as __wxautox_ui_base
+from .ui import base as __wxautox_ui_base
 from .ui.wechat_work.main import WeChatMainWnd, WeChatSubWnd, WeChatLoginWnd
-from .ui.component import CMenuWnd
+from .ui.wechat_work.component import CMenuWnd
 from .param import (
     WxResponse,
     WxParam,
@@ -52,8 +52,6 @@ from typing import Optional
 if TYPE_CHECKING:
     from wxauto.msgs.base import Message
     from wxauto.ui.wechat_work.sessionbox import SessionElement
-
-PROJECT_NAME = 'wxauto'
 
 __cached__ = None
 WX_CLIENTS: Dict[str, 'WeChatWork'] = dict()
