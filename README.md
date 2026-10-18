@@ -12,6 +12,11 @@
     python -m pip install --upgrade build setuptools wheel
     ```
 - 执行打包
+  - uv 管理
+    ```cmd
+    uv build --wheel
+    ```
+  - 普通管理
     ```cmd
     python -m build
     // 如果只需要 .whl 文件
