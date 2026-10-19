@@ -646,8 +646,43 @@ class WeChatWork(Chat, Listener):
         self.Show()
 
     @property
-    def nickname(self):
-        return self.core.nickname
+    def user_id(self):
+        """用户id"""
+        return self.core.user_id
+
+    @property
+    def nick_name(self):
+        """别名"""
+        return self.core.nick_name
+
+    @property
+    def real_name(self):
+        """
+        真实名字
+        Returns:
+
+        """
+        return self.core.real_name
+
+    @property
+    def company(self):
+        """
+        公司信息
+        Returns:
+
+        """
+        return self.core.company
+
+    @property
+    def verified(self):
+        return self.core.verified
+
+    def user_info(self):
+        """
+        获取当前用户信息
+        Returns:
+        """
+        return self.core.user_info()
 
     def close(self):
         return self.core.close()
@@ -797,7 +832,7 @@ class WeChatWork(Chat, Listener):
             try:
                 time.sleep(1)
             except KeyboardInterrupt:
-                wxlog.debug(f'wxauto("{self.nickname}") shutdown')
+                wxlog.debug(f'wxauto("{self.nick_name}") shutdown')
                 self.StopListening(True)
                 break
 
@@ -956,7 +991,7 @@ def get_wx_clients(debug=False):
             if hwnd not in hwnds:
                 del WX_CLIENTS[hwnd]
 
-    return {i.nickname: i for i in WX_CLIENTS.values()}
+    return {i.user_id: i for i in WX_CLIENTS.values()}
 
 
 def get_wx_logins() -> List[LoginWnd]:

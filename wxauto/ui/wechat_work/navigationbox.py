@@ -18,6 +18,7 @@ from wxauto.param import (
     WxParam,
 )
 from wxauto.utils import get_active_window, print_control_tree, time_it
+from wxauto.utils.tool_md5 import compute_md5
 from wxauto.languages import *
 from wxauto.uia import Control, uiautomation as uia
 from loguru import logger
@@ -40,6 +41,17 @@ class NavigationBox:
         self._verified = None
 
         self.init()
+
+    @property
+    def user_id(self):
+        text = self.nick_name
+        if not text:
+            return ""
+        if real_name := self.real_name:
+            text = f"{text}({real_name})"
+        if company := self.company:
+            text = f"{text};{company}"
+        return compute_md5(text)
 
     @property
     def nick_name(self) -> str:
@@ -196,6 +208,19 @@ class NavigationBox:
         # self.tab_single_chat_icon = self.control.ButtonControl(Name="单聊")
         # self.tab_external_chat_icon = self.control.ButtonControl(Name="外部聊天")
         pass
+
+    def user_info(self):
+        """
+        用户信息
+        Returns:
+        """
+        return {
+            "user_id": self.user_id,
+            "nick_name": self.nick_name,
+            "real_name": self.real_name,
+            "company": self.company,
+            "verified": self.verified
+        }
 
     def get_description(self):
         pattern = self.control.GetLegacyIAccessiblePattern()

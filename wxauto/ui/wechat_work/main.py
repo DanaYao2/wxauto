@@ -146,7 +146,7 @@ class WeChatMainWnd(WeChatSubWnd):
                 raise Exception(f'未找到企业微信窗口')
             self._setup_ui(hwnd)
 
-        wxlog.info(f'初始化成功，获取到已登录窗口：{self.nickname}')
+        wxlog.info(f'初始化成功，获取到已登录窗口：{self.nick_name}')
 
     @time_it
     def _setup_ui(self, hwnd: int):
@@ -178,11 +178,46 @@ class WeChatMainWnd(WeChatSubWnd):
         self.ChatBox = self.chatbox.control
 
     def __repr__(self):
-        return f'<{PROJECT_NAME} - {self.__class__.__name__} object("{self.nickname}")>'
+        return f'<{PROJECT_NAME} - {self.__class__.__name__} object("{self.nick_name}")>'
 
     @property
-    def nickname(self):
+    def user_id(self):
+        """用户id"""
+        return self.navigation.user_id
+
+    @property
+    def nick_name(self):
+        """别名"""
         return self.navigation.nick_name
+
+    @property
+    def real_name(self):
+        """
+        真实名字
+        Returns:
+
+        """
+        return self.navigation.real_name
+
+    @property
+    def company(self):
+        """
+        公司信息
+        Returns:
+
+        """
+        return self.navigation.company
+
+    @property
+    def verified(self):
+        return self.navigation.verified
+
+    def user_info(self):
+        """
+        获取当前用户信息
+        Returns:
+        """
+        return self.navigation.user_info()
 
     def Show(self):
         if hasattr(self, 'HWND'):
