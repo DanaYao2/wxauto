@@ -57,10 +57,10 @@ class WXWorkMessage(BaseSchema):
         return False
 
     @property
-    def msg_timestamp(self) -> Optional[int]:
+    def msg_timestamp(self) -> int:
         if self.msg_time:
             return int(self.msg_time.timestamp())
-        return None
+        return 0
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, WXWorkMessage):

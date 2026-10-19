@@ -367,49 +367,39 @@ class ChatBox(BaseUISubWnd):
         # todo 待确认
         self.parent._show()
         chat_info = {}
-        walk = uia.WalkControl(self.control)
-        for chat_name_control, depth in walk:
-            if isinstance(chat_name_control, uia.TextControl):
-                break
-        if (
-                not isinstance(chat_name_control, uia.TextControl)
-                or depth < 8
-        ):
-            return {}
-
-        # chat_name_control = self.control.GetProgenyControl(11)
-        chat_name_control_list = chat_name_control.GetParentControl().GetChildren()
-        chat_name_control_count = len(chat_name_control_list)
-
-        if chat_name_control_count == 1:
-            if self.control.ButtonControl(Name='公众号主页', searchDepth=9).Exists(0):
-                chat_info['chat_type'] = 'official'
+        if not self.msg_box:
+            return chat_info
+        if ((top_control:=self.control.GroupControl(Name="聊天信息",searchDepth=3))
+                and top_control.ButtonControl(Name="发起群聊", searchDepth=8).Exists(0)):
+            if top_control.ButtonControl(Name="聊天信息", searchDepth=8).Exists(0):
+                # 群聊
+                chat_info['chat_name']=self.who
+                chat_info['chat_type'] = 'group'
+                if not (group_control:=self.control.ListControl(Name="群成员")):
+                    if (control := self.tools.ButtonControl(Name='查找聊天记录', searchDepth=5))  and control.Exists(0):
+                        control.Click()
+                        time.sleep(random.uniform(0.5, 0.8))
+                    group_control = self.control.ListControl(Name="群成员")
+                second_text = group_control.TextControl(Name="群成员").Name
+                chat_info['group_member_count'] =int(second_text.replace("群成员 · ",""))
             else:
+                # 单聊
+                chat_info['chat_name'] = self.who
                 chat_info['chat_type'] = 'friend'
-            chat_info['chat_name'] = chat_name_control.Name
-        elif chat_name_control_count >= 2:
-            try:
-                second_text = chat_name_control_list[1].Name
-                if second_text.startswith('@'):
-                    chat_info['company'] = second_text
-                    chat_info['chat_type'] = 'service'
-                    chat_info['chat_name'] = chat_name_control.Name
+        else:
+            if top_control and (title_control:=top_control.TextControl(searchDepth=10)) and title_control.Exists(0):
+                title_text=title_control.Name.strip()
+                if self.tools:
+                    chat_info['chat_name'] = title_text
+                    chat_info['chat_type'] = 'system'
                 else:
-                    chat_info['group_member_count'] = \
-                        int(second_text.replace('(', '').replace(')', ''))
-                    chat_info['chat_type'] = 'group'
-                    chat_info['chat_name'] = \
-                        chat_name_control.Name.replace(second_text, '')
-            except:
-                chat_info['chat_type'] = 'friend'
-                chat_info['chat_name'] = chat_name_control.Name
+                    chat_info['chat_name'] = title_text
+                    chat_info['chat_type'] = 'system'
 
-            ori_chat_name_control = \
-                chat_name_control.GetParentControl(). \
-                    GetParentControl().TextControl(searchDepth=1)
-            if ori_chat_name_control.Exists(0):
-                chat_info['chat_remark'] = chat_info['chat_name']
-                chat_info['chat_name'] = ori_chat_name_control.Name
+            else:
+                chat_info['chat_name'] = ""
+                chat_info['chat_type'] = 'other'
+
         self._info = chat_info
         return chat_info
 
@@ -598,7 +588,7 @@ class ChatBox(BaseUISubWnd):
         else:
             return WxResponse.failure("没有更多消息了")
 
-    def iter_msgs(self, reverse: bool = False) -> Generator[WXWorkMessage]:
+    def iter_msgs(self, reverse: bool = False) -> Generator[WXWorkMessage,None,None]:
         """
         迭代读取消息。
 
@@ -634,18 +624,7 @@ class ChatBox(BaseUISubWnd):
         读取消息
         会话显示模型需要切换为 `消息气泡左对齐` 否则无法获取消息时间和人物
         Returns:
-
         """
-
-        # result = []
-        # if self.msg_box.Exists(0):
-        #     now_time = datetime.datetime.now()
-        #     for msg_control in self.msg_box.GetChildren():
-        #         msg_info = self._parse_msg(msg_control, now_time=now_time)
-        #         if msg_info:
-        #             result.append(msg_info)
-        #
-        # return WxResponse.success(msg="获取消息成功", data=result)
 
         return WxResponse.success(msg="获取消息成功", data=list(self.iter_msgs(reverse=False)), )
 
@@ -654,9 +633,33 @@ class ChatBox(BaseUISubWnd):
         获取新消息
         Returns:
         """
-        # todo 待确认
         if not self.msg_box:
             return []
+
+        if latest_msg := self.user_latest_msg_id:
+            # 加载足够的消息
+            msg_control = self.msg_box.GetFirstChildControl()
+            # 翻页获取消息
+            while msg_control:
+                msg_info = self._parse_msg(msg_control)
+                if not msg_info or msg_info.is_system:
+                    # 系统消息没有时间消息 获取下一条数据
+                    msg_control = msg_control.GetNextSiblingControl()
+                    continue
+
+                if msg_info.msg_timestamp <= latest_msg.msg_timestamp:
+                    # 消息加载完成
+                    break
+
+                # 向上翻滚 重新获取
+                result = self.load_more()
+                if result.is_success:
+                    # 翻页完成 继续获取最上一条数据
+                    msg_control = self.msg_box.GetFirstChildControl()
+                    continue
+                else:
+                    # 无法加载更多消息了
+                    break
 
         result = []
         for msg_info in self.iter_msgs(reverse=True):
@@ -664,47 +667,28 @@ class ChatBox(BaseUISubWnd):
                 # 系统消息 跳过处理
                 continue
 
-            if not (latest_msg_id := self.user_latest_msg_id):
+            if not latest_msg:
                 # 没有最新消息
                 result.append(msg_info)
                 continue
-            if latest_msg_id[0] != msg_info.msg_id and msg_info.msg_timestamp >= latest_msg_id[1]:
+
+            if latest_msg[0] != msg_info.runtime_id and msg_info.msg_timestamp >= latest_msg[1]:
                 result.append(msg_info)
                 continue
-            if latest_msg_id[0] == msg_info.msg_id:
+
+            if latest_msg[0] == msg_info.runtime_id:
                 break
-            if msg_info.msg_timestamp < latest_msg_id[1]:
+
+            if msg_info.msg_timestamp < latest_msg[1]:
                 break
+
         if result:
             USER_LATEST_MSG_IDS[self.id] = tuple(result[0].runtime_id, result[0].msg_timestamp)
 
         # 反转顺序
         return [reversed(result)]
 
-    def _get_tail_after_nth_match(self, msgs, last_msg: WXWorkMessage, n):
-        """
-        按基准消息筛选新消息
-        Args:
-            msgs: 消息列表
-            last_msg:上次最后一条消息
-        Returns:
-        """
-        matches = [
-            i for i, msg in reversed(list(enumerate(msgs)))
-            if not msg.is_system and msg.msg_id == last_msg.msg_id
-        ]
-        if len(matches):
-            wxlog.debug(f'匹配到基准消息：{last_msg}')
-            index = matches[-1]
-        else:
-            index = 0
-        try:
-            return msgs[index:]
-        except IndexError:
-            wxlog.debug(f"未匹配到第消息，返回空列表")
-            return []
-
-    def get_next_new_msgs(self, count=None, last_msg=None):
+    def get_next_new_msgs(self, count=None, last_msg: Optional[WXWorkMessage] = None):
         """
         获取下一条新消息
         Args:
@@ -715,97 +699,59 @@ class ChatBox(BaseUISubWnd):
         """
         # todo 待确认
         # 1. 消息列表不存在，则返回空列表
-        if not self.msg_box.Exists(0):
+        if not self.msg_box:
             wxlog.debug('消息列表不存在，返回空列表')
             return []
 
         # 2. 判断是否有新消息按钮，有的话点一下 自动跳到最新消息
         load_new_button = self.control.ButtonControl(RegexName=self._lang('re_新消息按钮'))
         if load_new_button.Exists(0):
-            self.root._show()
+            self.parent._show()
             wxlog.debug('检测到新消息按钮，点击加载新消息')
             load_new_button.Click()
             time.sleep(random.uniform(0.5, 1))
 
-        # 读取当前页面消息
-        msgs = self.get_msgs()
+        if last_msg is None:
+            # 获取从上次记录开始的消息
+            return self.get_new_msgs()
 
-        # 3. 如果有“以下是新消息”标志，则直接返回该标志下的所有消息即可
-        index = next((i for i, msg in enumerate(msgs) if self._lang('以下为新消息') == msg.content), None)
-        if index is not None:
-            wxlog.debug('获取以下是新消息下的所有消息')
-            return msgs[index:]
-
-        # 去除系统消息
-        msgs = [i for i in msgs if not i.is_system]
-        # 4. 根据会话列表传入的消息数量和最后一条新消息内容来判断新消息
-        if last_msg:
-            wxlog.debug(f'获取{count}条新消息，基准消息内容为：{last_msg}')
-            return self._get_tail_after_nth_match(msgs, last_msg, count)
-        return msgs
-
-
-class ChatRoomDetailWnd(BaseUISubWnd):
-    _ui_cls_name: str = 'SessionChatRoomDetailWnd'
-
-    def __init__(self, parent):
-        self.parent = parent
-        self.root = parent.root
-        self.control = self.root.control.Control(ClassName=self._ui_cls_name, searchDepth=1)
-
-    def _lang(self, text: str) -> str:
-        return CHATROOM_DETAIL_WINDOW.get(text, {WxParam.LANGUAGE: text}).get(WxParam.LANGUAGE)
-
-    def _edit(self, key, value):
-        wxlog.debug(f'修改{key}为`{value}`')
-        btn = self.control.TextControl(Name=key).GetParentControl().ButtonControl(Name=key)
-        if btn.Exists(0):
-            roll_into_view(self.control, btn)
-            btn.Click()
-        else:
-            wxlog.debug(f'当前非群聊，无法修改{key}')
-            return WxResponse.failure(f'Not a group chat, cannot modify `{key}`')
-        while True:
-            edit_hwnd_list = [
-                i[0]
-                for i in GetAllWindowExs(self.control.NativeWindowHandle)
-                if i[1] == 'EditWnd'
-            ]
-            if edit_hwnd_list:
-                edit_hwnd = edit_hwnd_list[0]
+        chat_control = self.msg_box.GetFirstChildControl()
+        # 翻页获取消息
+        while chat_control:
+            msg_info = self._parse_msg(chat_control)
+            if not msg_info or msg_info.is_system:
+                chat_control = chat_control.GetNextSiblingControl()
+                continue
+            if msg_info.msg_timestamp <= last_msg.msg_timestamp:
+                # 消息加载完成
                 break
-            btn.Click()
-        edit_win32 = uia.Win32(edit_hwnd)
-        edit_win32.shortcut_select_all()
-        edit_win32.send_keys_shortcut('{DELETE}')
-        edit_win32.input(value)
-        edit_win32.send_keys_shortcut('{ENTER}')
-        return WxResponse.success()
+            # 向上翻滚 重新获取
+            result = self.load_more()
+            if result.is_success:
+                chat_control = self.msg_box.GetFirstChildControl()
+                continue
+            else:
+                # 无法加载更多数据了
+                break
 
-    def get_group_members(self, control=False):
-        """获取群成员"""
-        more = self.control.ButtonControl(Name=self._lang('查看更多'), searchDepth=8)
-        if more.Exists(0.5):
-            more.Click()
-        members = [i for i in self.control.ListControl(Name=self._lang('聊天成员')).GetChildren()]
-        while members[-1].Name in [self._lang('添加'), self._lang('移出')]:
-            members = members[:-1]
-        if control:
-            return members
-        member_names = [i.Name for i in members]
-        self.close()
-        return member_names
+        result = []
+        for msg_info in self.iter_msgs(reverse=True):
+            if msg_info.is_system:
+                # 系统消息 跳过处理
+                continue
 
+            if last_msg.msg_id != msg_info.msg_id and msg_info.msg_timestamp > last_msg.msg_timestamp:
+                result.append(msg_info)
+                continue
 
-class GroupMemberElement:
-    def __init__(self, control, parent) -> None:
-        self.control = control
-        self.parent = parent
-        self.root = self.parent.root
-        self.nickname = self.control.Name
+            if last_msg.msg_id == msg_info.msg_id:
+                break
 
-    def __repr__(self) -> str:
-        return f"<wxauto Group Member Element at {hex(id(self))}>"
+            if msg_info.msg_timestamp <= last_msg.msg_timestamp:
+                break
+
+        # 反转顺序
+        return [reversed(result)]
 
 
 class AtMenu(BaseUISubWnd):

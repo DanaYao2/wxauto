@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import random
 from datetime import datetime, timedelta
-from lib2to3.fixes.fix_input import context
 
 from .component import CMenuWnd
+from .schemas import WXWorkMessage
 
 from wxauto.param import (
     WxParam,
@@ -267,6 +267,7 @@ class SessionElement:
         self.is_mute = None  # 是否免打扰
         self.is_new = False  # 是否有新消息
         self.new_count = 0  # 新消息数
+        self.latest_msg: Optional[WXWorkMessage] = None  # 上一次获取到的最新消息内容
         # 更新记录
         self._get_base_info()
 

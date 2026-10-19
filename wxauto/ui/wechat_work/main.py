@@ -283,11 +283,11 @@ class WeChatMainWnd(WeChatSubWnd):
         """
 
         def get_new_message(session):
-            last_content = session.content
+            last_msg = session.latest_msg
             new_count = session.new_count
             chat_name = session.name
             session.click()
-            return self.chatbox.get_next_new_msgs(new_count, last_content)
+            return self.chatbox.get_next_new_msgs(new_count, last_msg)
 
         def get_new_session(filter_mute):
             sessions = self.session_box.get_session()
@@ -309,7 +309,6 @@ class WeChatMainWnd(WeChatSubWnd):
                 wxlog.debug("当前会话列表获取新消息")
                 return get_new_message(new_sessions[0])
             else:
-                # self.navigation.chat_icon.DoubleClick()
                 self.navigation.switch_to_tab_chat_page(chat_page_tab)
 
             if new_sessions := get_new_session(filter_mute):
