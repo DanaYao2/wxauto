@@ -1,0 +1,177 @@
+
+name: Build and Release Wheels
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.abi }} wheel
+    runs-on: windows-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python-version: "3.10"
+            abi: cp310
+          - python-version: "3.11"
+            abi: cp311
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          architecture: x64
+
+      - name: Filter incompatible Pyd files
+        shell: pwsh
+        env:
+          TARGET_ABI: ${{ matrix.abi }}
+        run: |
+          $target = $env:TARGET_ABI
+
+          $allPyd = @(
+            Get-ChildItem -Path . -Recurse -File -Filter *.pyd |
+              Where-Object {
+                $_.FullName -notmatch '[\\/](\.git|\.venv|venv)[\\/]'
+              }
+          )
+
+          if ($allPyd.Count -eq 0) {
+            throw "No .pyd files found. Check the repository layout."
+          }
+
+          $matched = @(
+            $allPyd | Where-Object {
+              $_.Name -match [regex]::Escape($target) +
+                '-win_amd64'
+            }
+          )
+
+          if ($matched.Count -eq 0) {
+            throw "No $target-win_amd64 .pyd files found."
+          }
+
+          foreach ($file in $allPyd) {
+            if ($file.Name -notmatch [regex]::Escape($target) +
+                '-win_amd64') {
+              Write-Host "Removing incompatible file: $($file.FullName)"
+              Remove-Item $file.FullName
+            }
+          }
+
+          Write-Host "Target ABI: $target"
+          $matched | ForEach-Object {
+            Write-Host "Keeping: $($_.FullName)"
+          }
+
+      - name: Install build dependencies
+        run: python -m pip install --upgrade build setuptools wheel
+
+      - name: Build wheel
+        run: python -m build --wheel
+
+      - name: Validate wheel tags and contents
+        shell: pwsh
+        env:
+          TARGET_ABI: ${{ matrix.abi }}
+        run: |
+          $wheel = Get-ChildItem dist -Filter *.whl |
+            Select-Object -First 1
+
+          if (-not $wheel) {
+            throw "No wheel was generated."
+          }
+
+          $expected = "$($env:TARGET_ABI)-$($env:TARGET_ABI)-win_amd64"
+
+          if ($wheel.Name -notlike "*-$expected.whl") {
+            throw "Unexpected wheel filename: $($wheel.Name)"
+          }
+
+          python -m pip install --upgrade packaging
+
+          @'
+          import os
+          import zipfile
+          from pathlib import Path
+          from packaging.utils import parse_wheel_filename
+
+          target = os.environ["TARGET_ABI"]
+          wheels = list(Path("dist").glob("*.whl"))
+          assert len(wheels) == 1, wheels
+
+          wheel = wheels[0]
+          _, _, _, tags = parse_wheel_filename(wheel.name)
+          expected = f"{target}-{target}-win_amd64"
+
+          assert any(str(tag) == expected for tag in tags), tags
+
+          with zipfile.ZipFile(wheel) as archive:
+              names = archive.namelist()
+              pyds = [
+                  name for name in names
+                  if name.lower().endswith(".pyd")
+              ]
+
+              assert pyds, "Wheel contains no .pyd files"
+
+              wrong = [
+                  name for name in pyds
+                  if target not in Path(name).name
+                  or "win_amd64" not in Path(name).name
+              ]
+
+              assert not wrong, f"Incompatible Pyd files: {wrong}"
+
+              wheel_metadata = next(
+                  name for name in names
+                  if name.endswith(".dist-info/WHEEL")
+              )
+              metadata = archive.read(wheel_metadata).decode()
+
+              assert "Root-Is-Purelib: false" in metadata.lower(), (
+                  "Wheel is incorrectly marked as pure Python"
+              )
+
+          print(f"Validated: {wheel.name}")
+          print(f"Pyd files: {len(pyds)}")
+          '@ | Set-Content validate_wheel.py -Encoding utf8
+
+          python validate_wheel.py
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.abi }}
+          path: dist/*.whl
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all wheels
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.whl
+          generate_release_notes: true
