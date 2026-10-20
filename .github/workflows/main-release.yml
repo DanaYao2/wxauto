@@ -50,6 +50,10 @@ jobs:
             abi: cp310
           - python-version: "3.11"
             abi: cp311
+          - python-version: "3.12"
+            abi: cp312
+          - python-version: "3.13"
+            abi: cp313
 
     steps:
       - name: Checkout source
