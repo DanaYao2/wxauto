@@ -1,4 +1,3 @@
-
 name: Main Release
 
 on:
@@ -13,9 +12,11 @@ permissions:
   contents: write
 
 jobs:
+  # 第一步：确认 Tag 对应的提交已经包含在 master 历史中
   check:
     name: Verify release commit
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout release tag
         uses: actions/checkout@v4
@@ -27,11 +28,15 @@ jobs:
         shell: bash
         run: |
           git fetch origin master
+
           if ! git merge-base --is-ancestor HEAD origin/master; then
             echo "::error::Release commit is not contained in master."
             exit 1
           fi
 
+          echo "Release commit is contained in master."
+
+  # 第二步：分别构建 Python 3.10 和 3.11 的 wheel
   build:
     name: Build ${{ matrix.abi }} wheel
     needs: check
@@ -58,6 +63,45 @@ jobs:
           python-version: ${{ matrix.python-version }}
           architecture: x64
 
+      # 将 Tag 版本同步到 pyproject.toml
+      - name: Set version from tag
+        shell: pwsh
+        env:
+          RELEASE_REF: ${{ inputs.release-ref }}
+        run: |
+          $tag = $env:RELEASE_REF
+
+          if ($tag -notmatch '^v(\d+\.\d+\.\d+(?:[.-][0-9A-Za-z.-]+)?)$') {
+            throw "Invalid release tag: $tag"
+          }
+
+          $version = $Matches[1]
+          $path = "pyproject.toml"
+
+          $content = Get-Content $path -Raw
+
+          # 只修改 [project] 区块中的 version，避免误改其他区块
+          $pattern = '(?ms)(^\[project\][ \t]*\r?\n.*?^\s*version\s*=\s*)("[^"]+"|''[^'']+'')'
+
+          if (-not [regex]::IsMatch($content, $pattern)) {
+            throw "Could not find a static version field in [project] of pyproject.toml."
+          }
+
+          $content = [regex]::Replace(
+            $content,
+            $pattern,
+            {
+              param($match)
+              return $match.Groups[1].Value + '"' + $version + '"'
+            },
+            1
+          )
+
+          Set-Content -Path $path -Value $content -Encoding utf8
+
+          Write-Host "Set project version to $version"
+
+      # 删除其他 Python 版本的二进制扩展
       - name: Filter incompatible Pyd files
         shell: pwsh
         env:
@@ -76,11 +120,11 @@ jobs:
             throw "No .pyd files found."
           }
 
+          $pattern = [regex]::Escape($target) + '-win_amd64'
+
           $matched = @(
             $allPyd | Where-Object {
-              $_.Name -match (
-                [regex]::Escape($target) + '-win_amd64'
-              )
+              $_.Name -match $pattern
             }
           )
 
@@ -88,11 +132,15 @@ jobs:
             throw "No matching $target-win_amd64 files found."
           }
 
+          Write-Host "Keeping these files:"
+          $matched | ForEach-Object {
+            Write-Host "  $($_.FullName)"
+          }
+
           foreach ($file in $allPyd) {
-            if ($file.Name -notmatch (
-              [regex]::Escape($target) + '-win_amd64'
-            )) {
-              Remove-Item $file.FullName
+            if ($file.Name -notmatch $pattern) {
+              Remove-Item -LiteralPath $file.FullName -Force
+              Write-Host "Removed: $($file.FullName)"
             }
           }
 
@@ -102,15 +150,17 @@ jobs:
       - name: Build wheel
         run: python -m build --wheel
 
+      # 确保 wheel 的 Python ABI 和平台标签正确
       - name: Validate wheel filename
         shell: pwsh
         env:
           TARGET_ABI: ${{ matrix.abi }}
+          RELEASE_REF: ${{ inputs.release-ref }}
         run: |
           $wheels = @(Get-ChildItem dist -Filter *.whl)
 
           if ($wheels.Count -ne 1) {
-            throw "Expected exactly one wheel."
+            throw "Expected exactly one wheel, found $($wheels.Count)."
           }
 
           $expected = "$($env:TARGET_ABI)-$($env:TARGET_ABI)-win_amd64"
@@ -119,13 +169,24 @@ jobs:
             throw "Unexpected wheel filename: $($wheels[0].Name)"
           }
 
+          $version = $env:RELEASE_REF -replace '^v', ''
+          $expectedVersion = $version -replace '-', '_'
+
+          if ($wheels[0].Name -notlike "wxauto-$expectedVersion-$expected.whl") {
+            throw "Wheel version or filename does not match the release tag: $($wheels[0].Name)"
+          }
+
+          Write-Host "Validated wheel: $($wheels[0].Name)"
+
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
         with:
           name: wheel-${{ matrix.abi }}
           path: dist/*.whl
           if-no-files-found: error
+          retention-days: 7
 
+  # 第三步：两个 Python 版本都构建成功后，发布 GitHub Release
   publish:
     name: Publish GitHub Release
     needs: build
