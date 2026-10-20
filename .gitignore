@@ -11,3 +11,4 @@ __pycache__/
 @AutomationLog.txt
 .venv
 test*.*
+/wxautox_whl/
