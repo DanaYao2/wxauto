@@ -171,7 +171,7 @@ class NavigationBox:
 
                 if match:
                     alias = match.group("alias").strip()  # 别名
-                    name = (match.group("company") or "").strip()  # 姓名
+                    name = (match.group("name") or "").strip()  # 姓名
                     company = (match.group("company") or "").strip()  # 公司
                     verified = bool(match.group("verified"))  # 是否认证
                 else:
