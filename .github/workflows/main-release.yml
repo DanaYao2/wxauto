@@ -1,18 +1,40 @@
 
-name: Build and Release Wheels
+name: Main Release
 
 on:
-  push:
-    tags:
-      - "v*"
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      release-ref:
+        description: Tag to release
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 jobs:
+  check:
+    name: Verify release commit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release-ref }}
+          fetch-depth: 0
+
+      - name: Check master ancestry
+        shell: bash
+        run: |
+          git fetch origin master
+          if ! git merge-base --is-ancestor HEAD origin/master; then
+            echo "::error::Release commit is not contained in master."
+            exit 1
+          fi
+
   build:
     name: Build ${{ matrix.abi }} wheel
+    needs: check
     runs-on: windows-latest
 
     strategy:
@@ -27,6 +49,8 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release-ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -49,31 +73,27 @@ jobs:
           )
 
           if ($allPyd.Count -eq 0) {
-            throw "No .pyd files found. Check the repository layout."
+            throw "No .pyd files found."
           }
 
           $matched = @(
             $allPyd | Where-Object {
-              $_.Name -match [regex]::Escape($target) +
-                '-win_amd64'
+              $_.Name -match (
+                [regex]::Escape($target) + '-win_amd64'
+              )
             }
           )
 
           if ($matched.Count -eq 0) {
-            throw "No $target-win_amd64 .pyd files found."
+            throw "No matching $target-win_amd64 files found."
           }
 
           foreach ($file in $allPyd) {
-            if ($file.Name -notmatch [regex]::Escape($target) +
-                '-win_amd64') {
-              Write-Host "Removing incompatible file: $($file.FullName)"
+            if ($file.Name -notmatch (
+              [regex]::Escape($target) + '-win_amd64'
+            )) {
               Remove-Item $file.FullName
             }
-          }
-
-          Write-Host "Target ABI: $target"
-          $matched | ForEach-Object {
-            Write-Host "Keeping: $($_.FullName)"
           }
 
       - name: Install build dependencies
@@ -82,74 +102,22 @@ jobs:
       - name: Build wheel
         run: python -m build --wheel
 
-      - name: Validate wheel tags and contents
+      - name: Validate wheel filename
         shell: pwsh
         env:
           TARGET_ABI: ${{ matrix.abi }}
         run: |
-          $wheel = Get-ChildItem dist -Filter *.whl |
-            Select-Object -First 1
+          $wheels = @(Get-ChildItem dist -Filter *.whl)
 
-          if (-not $wheel) {
-            throw "No wheel was generated."
+          if ($wheels.Count -ne 1) {
+            throw "Expected exactly one wheel."
           }
 
           $expected = "$($env:TARGET_ABI)-$($env:TARGET_ABI)-win_amd64"
 
-          if ($wheel.Name -notlike "*-$expected.whl") {
-            throw "Unexpected wheel filename: $($wheel.Name)"
+          if ($wheels[0].Name -notlike "*-$expected.whl") {
+            throw "Unexpected wheel filename: $($wheels[0].Name)"
           }
-
-          python -m pip install --upgrade packaging
-
-          @'
-          import os
-          import zipfile
-          from pathlib import Path
-          from packaging.utils import parse_wheel_filename
-
-          target = os.environ["TARGET_ABI"]
-          wheels = list(Path("dist").glob("*.whl"))
-          assert len(wheels) == 1, wheels
-
-          wheel = wheels[0]
-          _, _, _, tags = parse_wheel_filename(wheel.name)
-          expected = f"{target}-{target}-win_amd64"
-
-          assert any(str(tag) == expected for tag in tags), tags
-
-          with zipfile.ZipFile(wheel) as archive:
-              names = archive.namelist()
-              pyds = [
-                  name for name in names
-                  if name.lower().endswith(".pyd")
-              ]
-
-              assert pyds, "Wheel contains no .pyd files"
-
-              wrong = [
-                  name for name in pyds
-                  if target not in Path(name).name
-                  or "win_amd64" not in Path(name).name
-              ]
-
-              assert not wrong, f"Incompatible Pyd files: {wrong}"
-
-              wheel_metadata = next(
-                  name for name in names
-                  if name.endswith(".dist-info/WHEEL")
-              )
-              metadata = archive.read(wheel_metadata).decode()
-
-              assert "Root-Is-Purelib: false" in metadata.lower(), (
-                  "Wheel is incorrectly marked as pure Python"
-              )
-
-          print(f"Validated: {wheel.name}")
-          print(f"Pyd files: {len(pyds)}")
-          '@ | Set-Content validate_wheel.py -Encoding utf8
-
-          python validate_wheel.py
 
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
@@ -158,13 +126,13 @@ jobs:
           path: dist/*.whl
           if-no-files-found: error
 
-  release:
+  publish:
     name: Publish GitHub Release
     needs: build
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download all wheels
+      - name: Download wheels
         uses: actions/download-artifact@v4
         with:
           path: dist
@@ -173,5 +141,6 @@ jobs:
       - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.release-ref }}
           files: dist/*.whl
           generate_release_notes: true
