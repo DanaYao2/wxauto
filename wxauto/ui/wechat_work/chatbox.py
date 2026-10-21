@@ -364,31 +364,37 @@ class ChatBox(BaseUISubWnd):
             wxlog.debug(f"[{i}] `消息区>工具`栏`查找聊天记录`按钮查找失败")
 
     def get_info(self):
-        # todo 待确认
+        """
+        会话信息
+        类型
+        名字
+        群成员数
+        Returns:
+        """
         self.parent._show()
         chat_info = {}
         if not self.msg_box:
             return chat_info
-        if ((top_control:=self.control.GroupControl(Name="聊天信息",searchDepth=3))
+        if ((top_control := self.control.GroupControl(Name="聊天信息", searchDepth=3))
                 and top_control.ButtonControl(Name="发起群聊", searchDepth=8).Exists(0)):
             if top_control.ButtonControl(Name="聊天信息", searchDepth=8).Exists(0):
                 # 群聊
-                chat_info['chat_name']=self.who
+                chat_info['chat_name'] = self.who
                 chat_info['chat_type'] = 'group'
-                if not (group_control:=self.control.ListControl(Name="群成员")):
-                    if (control := self.tools.ButtonControl(Name='查找聊天记录', searchDepth=5))  and control.Exists(0):
+                if not (group_control := self.control.ListControl(Name="群成员")):
+                    if (control := self.tools.ButtonControl(Name='查找聊天记录', searchDepth=5)) and control.Exists(0):
                         control.Click()
                         time.sleep(random.uniform(0.5, 0.8))
                     group_control = self.control.ListControl(Name="群成员")
                 second_text = group_control.TextControl(Name="群成员").Name
-                chat_info['group_member_count'] =int(second_text.replace("群成员 · ",""))
+                chat_info['group_member_count'] = int(second_text.replace("群成员 · ", ""))
             else:
                 # 单聊
                 chat_info['chat_name'] = self.who
                 chat_info['chat_type'] = 'friend'
         else:
-            if top_control and (title_control:=top_control.TextControl(searchDepth=10)) and title_control.Exists(0):
-                title_text=title_control.Name.strip()
+            if top_control and (title_control := top_control.TextControl(searchDepth=10)) and title_control.Exists(0):
+                title_text = title_control.Name.strip()
                 if self.tools:
                     chat_info['chat_name'] = title_text
                     chat_info['chat_type'] = 'system'
@@ -588,7 +594,7 @@ class ChatBox(BaseUISubWnd):
         else:
             return WxResponse.failure("没有更多消息了")
 
-    def iter_msgs(self, reverse: bool = False) -> Generator[WXWorkMessage,None,None]:
+    def iter_msgs(self, reverse: bool = False) -> Generator[WXWorkMessage, None, None]:
         """
         迭代读取消息。
 
@@ -619,7 +625,7 @@ class ChatBox(BaseUISubWnd):
             msg_control = get_next(msg_control)
 
     @time_it
-    def get_msgs(self):
+    def get_msgs(self) -> WxResponse:
         """
         读取消息
         会话显示模型需要切换为 `消息气泡左对齐` 否则无法获取消息时间和人物

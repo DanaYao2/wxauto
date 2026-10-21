@@ -120,11 +120,11 @@ class WeChatSubWnd(BaseUISubWnd):
             return WxResponse.failure(f'未找到会话: {who}')
         return chatbox.get_group_members()
 
-    def get_msgs(self):
+    def get_msgs(self)->WxResponse:
         chatbox = self._get_chatbox()
         if chatbox:
             return chatbox.get_msgs()
-        return []
+        return WxResponse.failure("未找到会话")
 
     def get_new_msgs(self):
         return self._get_chatbox().get_new_msgs()

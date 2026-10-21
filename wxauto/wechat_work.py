@@ -185,7 +185,7 @@ class Chat:
         """
         return self.core.load_more_message(interval)
 
-    def GetAllMessage(self) -> List['Message']:
+    def GetAllMessage(self) -> WxResponse:
         """获取当前聊天窗口的所有消息
 
         Returns:
