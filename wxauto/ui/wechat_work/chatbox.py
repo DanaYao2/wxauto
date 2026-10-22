@@ -217,6 +217,9 @@ class ChatBox(BaseUISubWnd):
             _text = source_text
         else:
             send_name, _text = source_text.split(' ', 1)
+            if send_name == "未下载":
+                source_text = _text
+                send_name, _text = source_text.split(' ', 1)
 
         _text = _text.strip()
         # 提取日期
