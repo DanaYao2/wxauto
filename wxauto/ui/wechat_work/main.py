@@ -53,15 +53,15 @@ class WeChatSubWnd(BaseUISubWnd):
         self.parent = parent
         if isinstance(key, str):
             _key = key.split('@')[0]
-            hwnd = FindWindow(classname=self._ui_cls_name, name=key, timeout=timeout)
+            hwnd = FindWindow(classname=self._ui_cls_name, name=_key, timeout=timeout)
         else:
             hwnd = key
         self.control = uia.ControlFromHandle(hwnd)
         if self.control is not None:
             chatbox_control = ChatBox.get_chat_control(self.control)
             if isinstance(key, int) or (
-                    (control := chatbox_control.TextControl(searchDepth=10)) and control and control.Exists(
-                0) and control.Name == key):
+                    (control := chatbox_control.TextControl(searchDepth=10)) and control.Exists(0)
+                    and (title := control.Name) and (title == key or title.replace(" ", "") == key)):
                 self.chatbox = ChatBox(chatbox_control, self)
                 self.nickname = self.chatbox.who
 
@@ -120,7 +120,7 @@ class WeChatSubWnd(BaseUISubWnd):
             return WxResponse.failure(f'未找到会话: {who}')
         return chatbox.get_group_members()
 
-    def get_msgs(self)->WxResponse:
+    def get_msgs(self) -> WxResponse:
         chatbox = self._get_chatbox()
         if chatbox:
             return chatbox.get_msgs()
@@ -145,6 +145,7 @@ class WeChatMainWnd(WeChatSubWnd):
             if not hwnd:
                 raise Exception(f'未找到企业微信窗口')
             self._setup_ui(hwnd)
+        self._sub_wnds = dict()
 
         wxlog.info(f'初始化成功，获取到已登录窗口：{self.nick_name}')
 
@@ -248,7 +249,7 @@ class WeChatMainWnd(WeChatSubWnd):
         if keywords and is_wx and keywords.find('@') == -1:
             keywords = f'{keywords}@微信'
 
-        if keywords and (chatbox := WeChatSubWnd(keywords, self, timeout=0)).nickname:
+        if keywords and (chatbox := self.get_sub_wnd(keywords)):
             return chatbox.chatbox
         else:
             if keywords:
@@ -275,10 +276,23 @@ class WeChatMainWnd(WeChatSubWnd):
         获取所有聊天悬浮窗口
         Returns:
         """
-        sub_wxs = [i for i in GetAllWindows() if i[1] == WeChatSubWnd._ui_cls_name]
-        return {obj.nickname: obj for i in sub_wxs if (obj := WeChatSubWnd(i[0], self)) and obj.nickname}
+        sub_wxs = {i[0] for i in GetAllWindows() if i[1] == WeChatSubWnd._ui_cls_name}
+        # 清理已经关闭的窗口
+        self._sub_wnds = {
+            hwnd: obj
+            for hwnd, obj in self._sub_wnds.items() if hwnd in sub_wxs
+        }
 
-    def get_sub_wnd(self, who: str, timeout: int = 0):
+        # 仅创建尚未缓存的实例
+        for hwnd in sub_wxs:
+            if hwnd not in self._sub_wnds:
+                obj = WeChatSubWnd(hwnd, self)
+                if obj.nickname:
+                    self._sub_wnds[hwnd] = obj
+
+        return {obj.nickname: obj for obj in self._sub_wnds.values() if obj.nickname}
+
+    def get_sub_wnd(self, who: str, timeout: int = 0) -> Optional[WeChatSubWnd]:
         return self.get_all_sub_wnds().get(who)
 
     def open_separate_window(self, keywords: str) -> WeChatSubWnd:
@@ -306,6 +320,11 @@ class WeChatMainWnd(WeChatSubWnd):
         if result := self.session_box.open_separate_window(keywords):
             find_nickname = result['data'].get('nickname', keywords)
             return WeChatSubWnd(find_nickname, self)
+
+        # 再尝试一次
+        if subwin := self.get_sub_wnd(keywords):
+            wxlog.debug(f"{keywords} 获取到已存在的子窗口: {subwin}")
+            return subwin
 
     def _get_next_new_message(self, chat_page_tab, filter_mute: bool = False):
         """

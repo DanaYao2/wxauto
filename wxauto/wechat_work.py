@@ -732,6 +732,20 @@ class WeChatWork(Chat, Listener):
         """
         return self.core.switch_chat(who, company=company, is_wx=is_wx)
 
+    def OpenSeparateWindow(self, nickname: str) -> Optional['Chat']:
+        """
+        打开悬浮窗口
+        Args:
+            nickname: 要聊天的对象
+        Returns:
+        """
+        # 打开指定会话并悬浮窗口
+        sub_win = self.core.open_separate_window(nickname)
+        if sub_win is None or not sub_win.nickname:
+            return None
+        chat = Chat(sub_win)
+        return chat
+
     def AddListenChat(self, nickname: str, callback: Callable[['Message', str], None], ):
         """
         添加监听聊天，将聊天窗口独立出去形成Chat对象子窗口，用于监听

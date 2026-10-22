@@ -20,7 +20,7 @@ from wxauto.param import (
     WxResponse,
 )
 from wxauto.languages import *
-from wxauto.utils import SetClipboardText, time_it
+from wxauto.utils import SetClipboardText, GetAllWindows, time_it
 from wxauto.logger import wxlog
 from wxauto.uia import Control
 from wxauto.utils.tools import roll_into_view
@@ -223,17 +223,21 @@ class SessionBox:
         Returns:
         """
         wxlog.debug(f"打开独立窗口: {name}")
+        ui_cls_name = "WwStandaloneConversationWnd"
         sessions = self.get_session()
         for session in sessions:
             if session.name == name:
                 wxlog.debug(f"找到会话: {name}")
-                while session.control.BoundingRectangle.height():
+                sub_wnd_cunt = sum(1 for i in GetAllWindows() if i[1] == ui_cls_name)
+                while (session.control.BoundingRectangle.height()
+                       and sum(1 for i in GetAllWindows() if i[1] == ui_cls_name) == sub_wnd_cunt):
                     try:
                         session.click()
                         session.double_click()
+                        time.sleep(0.1)
                     except:
                         pass
-                    time.sleep(0.1)
+                    time.sleep(random.uniform(0.5, 2.0))
                 else:
                     return WxResponse.success(data={'nickname': name})
         wxlog.debug(f"未找到会话: {name}")
