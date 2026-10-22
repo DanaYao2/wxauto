@@ -126,6 +126,17 @@ class WeChatSubWnd(BaseUISubWnd):
             return chatbox.get_msgs()
         return WxResponse.failure("未找到会话")
 
+    def scroll_to_latest(self) -> WxResponse:
+        """
+        滚动到最新位置
+        Returns:
+
+        """
+        chatbox = self._get_chatbox()
+        if chatbox:
+            return chatbox.get_msgs()
+        return WxResponse.failure("未找到会话")
+
     def get_new_msgs(self):
         return self._get_chatbox().get_new_msgs()
 

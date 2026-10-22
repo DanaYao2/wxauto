@@ -706,7 +706,6 @@ class ChatBox(BaseUISubWnd):
         Returns:
 
         """
-        # todo 待确认
         # 1. 消息列表不存在，则返回空列表
         if not self.msg_box:
             wxlog.debug('消息列表不存在，返回空列表')
@@ -761,6 +760,19 @@ class ChatBox(BaseUISubWnd):
 
         # 反转顺序
         return [reversed(result)]
+
+    def scroll_to_latest(self):
+        """
+        滚动到最新位置
+        Returns:
+        """
+        if not self.msg_box:
+            return WxResponse.failure("没有消息区域")
+        if (but_control := self.control.ButtonControl(Name="回到最新位置", searchDepth=10)) and but_control.Exists(0):
+            but_control.Click()
+            time.sleep(random.uniform(0.5, 1))
+            return WxResponse.success("跳转成功")
+        return WxResponse.success("已经是最新消息位置")
 
 
 class AtMenu(BaseUISubWnd):

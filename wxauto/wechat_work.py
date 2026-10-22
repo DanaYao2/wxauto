@@ -193,6 +193,14 @@ class Chat:
         """
         return self.core.get_msgs()
 
+    def ScrollToLatest(self) -> WxResponse:
+        """
+
+        Returns:
+
+        """
+        return self.core.scroll_to_latest()
+
     def GetNewMessage(self) -> List['Message']:
         """获取当前聊天窗口的新消息
 
