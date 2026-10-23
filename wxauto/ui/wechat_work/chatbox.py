@@ -13,7 +13,7 @@ import random
 
 from ..base import BaseUISubWnd
 from .schemas import WXWorkMessage
-from wxauto.ui.component import (
+from wxauto.ui.wechat_work.component import (
     CMenuWnd,
 )
 from wxauto.param import (
