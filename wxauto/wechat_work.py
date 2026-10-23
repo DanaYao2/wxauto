@@ -1008,10 +1008,10 @@ def get_wx_clients(debug=False):
         WX_CLIENTS[str(hwnd)] = WeChatWork(hwnd=hwnd, debug=debug)
 
     if len(WX_CLIENTS.keys()) > len(hwnds):
-        old_hwnds = list(WX_CLIENTS.keys())
-        for hwnd in old_hwnds:
-            if hwnd not in hwnds:
-                del WX_CLIENTS[hwnd]
+        # 去除多余数据
+        hwnds_set = set(hwnds)
+        for hwnd in WX_CLIENTS.keys() - hwnds_set:
+            WX_CLIENTS.pop(hwnd, None)
 
     return {i.user_id: i for i in WX_CLIENTS.values()}
 
