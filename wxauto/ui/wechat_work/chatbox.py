@@ -281,7 +281,7 @@ class ChatBox(BaseUISubWnd):
             # 有效消息(不是系统消息)
             if not old_last_msg_id or msg_info.msg_timestamp >= old_last_msg_id[1]:
                 # 没有旧消息或者消息时间大于当前记录的消息时间 更新数据
-                USER_LATEST_MSG_IDS[user_id] = tuple(runtime_id, msg_info.msg_timestamp)
+                USER_LATEST_MSG_IDS[user_id] = tuple((runtime_id, msg_info.msg_timestamp))
                 return
             # 小于当前记录的时间,说明不是最新消息,不用继续处理了
             return
@@ -692,7 +692,7 @@ class ChatBox(BaseUISubWnd):
                 break
 
         if result:
-            USER_LATEST_MSG_IDS[self.id] = tuple(result[0].runtime_id, result[0].msg_timestamp)
+            USER_LATEST_MSG_IDS[self.id] = tuple((result[0].runtime_id, result[0].msg_timestamp))
 
         # 反转顺序
         return [reversed(result)]
