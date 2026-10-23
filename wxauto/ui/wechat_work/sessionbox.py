@@ -106,7 +106,7 @@ class SessionBox:
         获取会话列表
         Returns:
         """
-        if self.session_list and self.session_list.Exists(0):
+        if self.session_list:
             session_list = self.session_list.ListItemControl().GetParentControl()
             return [SessionElement(i, self) for i in session_list.GetChildren()]
         else:
@@ -141,7 +141,7 @@ class SessionBox:
         Returns:
         """
         wxlog.debug(f"切换聊天窗口: {keywords=}, {company=},{is_wx}")
-        self.root._show()
+        self.parent._show()
         _keywords = keywords
 
         if company and _keywords.find('@') == -1:

@@ -329,8 +329,10 @@ class ChatBox(BaseUISubWnd):
         return USED_MSG_IDS[self.id]
 
     @property
-    def user_latest_msg_id(self):
-        return USER_LATEST_MSG_IDS.get(self.id)
+    def user_latest_msg_id(self) -> Optional[tuple]:
+        if chat_id := self.id:
+            return USER_LATEST_MSG_IDS.get(chat_id)
+        return None
 
     @property
     def msg_history_box(self) -> Optional[Control]:
@@ -656,7 +658,7 @@ class ChatBox(BaseUISubWnd):
                     msg_control = msg_control.GetNextSiblingControl()
                     continue
 
-                if msg_info.msg_timestamp <= latest_msg.msg_timestamp:
+                if msg_info.msg_timestamp <= latest_msg[1]:
                     # 消息加载完成
                     break
 
@@ -691,8 +693,8 @@ class ChatBox(BaseUISubWnd):
             if msg_info.msg_timestamp < latest_msg[1]:
                 break
 
-        if result:
-            USER_LATEST_MSG_IDS[self.id] = tuple((result[0].runtime_id, result[0].msg_timestamp))
+        if result and (chat_id := self.id):
+            USER_LATEST_MSG_IDS[chat_id] = tuple((result[0].runtime_id, result[0].msg_timestamp))
 
         # 反转顺序
         return list(reversed(result))
