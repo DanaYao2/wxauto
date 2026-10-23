@@ -695,7 +695,7 @@ class ChatBox(BaseUISubWnd):
             USER_LATEST_MSG_IDS[self.id] = tuple((result[0].runtime_id, result[0].msg_timestamp))
 
         # 反转顺序
-        return [reversed(result)]
+        return list(reversed(result))
 
     def get_next_new_msgs(self, count=None, last_msg: Optional[WXWorkMessage] = None):
         """
@@ -759,7 +759,7 @@ class ChatBox(BaseUISubWnd):
                 break
 
         # 反转顺序
-        return [reversed(result)]
+        return list(reversed(result))
 
     def scroll_to_latest(self):
         """
